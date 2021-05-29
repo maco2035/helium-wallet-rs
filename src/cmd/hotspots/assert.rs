@@ -12,13 +12,7 @@ use helium_api::{hotspots, Dbi};
 pub struct Cmd {
     /// Address of hotspot to assert
     #[structopt(long)]
-    gateway: PublicKey,
-    
-    /// Payee of the transcation
-    /// Default is going to be the current wallet
-    #[structopt(long)]
-    payee: Option<string>,
-    
+    gateway: PublicKey,  
     
     /// Lattitude of hotspot location to assert.
     /// For negative values use '=", for example: "--lat=-xx.xxxxxxx".
@@ -42,9 +36,10 @@ pub struct Cmd {
 
     /// Use the DeWi "staking" server to pay for the assert location. Note that
     /// no, or only a limited number of asserts may available for use by the
-    /// staking server.
+    /// staking server, must speicy the maker account for the payment, defualt
+    /// is the current wallet.
     #[structopt(long)]
-    onboarding: bool,
+    onboarding: Option<string>,
 
     #[structopt(long)]
     commit: bool,
@@ -56,34 +51,54 @@ impl Cmd {
         let wallet = load_wallet(opts.files)?;
         let keypair = wallet.decrypt(password.as_bytes())?;
 
+        //set the default staking client infromation
         let staking_client = staking::Client::default();
+        
+        //set the client to the correct network
         let client = helium_api::Client::new_with_base_url(api_url(wallet.public_key.network));
+        
+        //set the hotspot the cmd wallet input
         let hotspot = hotspots::get(&client, &self.gateway.to_string()).await?;
+        
+        //set the wallet key
         let gain: i32 = if let Some(gain) = self.gain.or(hotspot.gain) {
             gain.into()
         } else {
             bail!("no gain specified or found on chain")
         };
+        
+        //set the elevation of the miner
         let elevation = if let Some(elevation) = self.elevation.or(hotspot.elevation) {
             elevation
         } else {
+            
+            //throw error
             bail!("no elevation specified or found on chain")
+            
         };
 
+        //get the wallet key
         let wallet_key = keypair.public_key();
-        // Get the next likely gateway nonce for the new transaction
+        
+        
+        // Get the next likely gateway nonce for the new transaction by taking
+        // the current one and adding one. it can be wrong.
         let nonce = helium_api::hotspots::get(&client, &self.gateway.to_string())
             .await?
             .speculative_nonce
             + 1;
+        
+        //set the payer
         let payer = if self.onboarding {
             staking_client.address_for(&self.gateway).await?.into()
         } else {
             wallet.public_key.into()
         };
+        
+        // convert location
         let location: geo_types::Point<f64> = (self.lon, self.lat).into();
         let mut txn = BlockchainTxnAssertLocationV2 {
-            payer: ,
+            payer,
             owner: wallet_key.into(),
             gateway: self.gateway.clone().into(),
             location: h3ron::H3Cell::from_point(&location, 12)?.to_string(),
@@ -116,6 +131,8 @@ impl Cmd {
     }
 }
 
+
+//print the transacntion
 fn print_txn(
     txn: &BlockchainTxnAssertLocationV2,
     envelope: &BlockchainTxn,
