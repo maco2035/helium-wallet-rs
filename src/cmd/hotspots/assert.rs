@@ -13,7 +13,13 @@ pub struct Cmd {
     /// Address of hotspot to assert
     #[structopt(long)]
     gateway: PublicKey,
-
+    
+    /// Payee of the transcation
+    /// Default is going to be the current wallet
+    #[structopt(long)]
+    payee: Option<string>,
+    
+    
     /// Lattitude of hotspot location to assert.
     /// For negative values use '=", for example: "--lat=-xx.xxxxxxx".
     #[structopt(long)]
@@ -77,7 +83,7 @@ impl Cmd {
         };
         let location: geo_types::Point<f64> = (self.lon, self.lat).into();
         let mut txn = BlockchainTxnAssertLocationV2 {
-            payer,
+            payer: ,
             owner: wallet_key.into(),
             gateway: self.gateway.clone().into(),
             location: h3ron::H3Cell::from_point(&location, 12)?.to_string(),
